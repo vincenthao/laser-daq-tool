@@ -64,25 +64,43 @@ class ImportController(QObject):
         first_path = Path(path_list[0])  # 取第一个文件路径
         self.import_started.emit(first_path.name)  # 发射开始信号
 
-        # 清理上一次的线程
-        if self._thread is not None and self._thread.isRunning():  # 线程仍在运行
-            self._thread.quit()  # 退出线程
-            self._thread.wait(2000)  # 等待最多2秒
+        # ---- 清理上一次的线程和 worker ----
+        old_thread = self._thread  # 保存旧的线程引用
+        old_worker = self._worker  # 保存旧的 worker 引用
+        if old_worker is not None:  # 有旧 worker
+            # 断开旧 worker 的所有信号，防止旧信号触发回调
+            try:  # 捕获异常（可能已断开）
+                old_worker.read_finished.disconnect()  # 断开读取完成
+                old_worker.read_error.disconnect()  # 断开读取错误
+            except TypeError:  # 信号可能已断开
+                pass  # 忽略
+            old_worker.deleteLater()  # 标记旧 worker 删除
+        if old_thread is not None:  # 有旧线程
+            if old_thread.isRunning():  # 仍在运行
+                old_thread.quit()  # 退出事件循环
+                old_thread.wait(3000)  # 等待最多3秒
+            old_thread.deleteLater()  # 标记旧线程删除
 
-        # 创建新的工作线程
-        self._thread = QThread(self)  # 创建 QThread
+        # ---- 创建新的工作线程 ----
+        self._thread = QThread()  # 创建 QThread（无 parent，避免旧 parent 干扰）
         self._worker = ImportWorker()  # 创建 ImportWorker
         self._worker.moveToThread(self._thread)  # 将 worker 移到线程
 
-        # 连接信号
-        self._thread.started.connect(  # 线程启动时
-            lambda: self._worker.load(str(first_path))  # 调用 worker.load
-        )  # lambda 捕获 first_path
-        self._worker.read_finished.connect(self._on_worker_finished)  # 读取成功
-        self._worker.read_error.connect(self._on_worker_error)  # 读取失败
+        # 连接信号（worker → 线程生命周期）
         self._worker.read_finished.connect(self._thread.quit)  # 完成后退出线程
         self._worker.read_error.connect(self._thread.quit)  # 错误后退出线程
         self._thread.finished.connect(self._thread.deleteLater)  # 线程结束后清理
+        self._thread.finished.connect(self._worker.deleteLater)  # 线程结束后清理 worker
+
+        # 连接信号（worker → 控制器回调，用 QueuedConnection 确保线程安全）
+        self._worker.read_finished.connect(self._on_worker_finished)  # 读取成功
+        self._worker.read_error.connect(self._on_worker_error)  # 读取失败
+
+        # 线程启动 → 调用 worker.load（捕获 first_path 到闭包）
+        file_path_str = str(first_path)  # 转为字符串避免 Path 对象跨线程问题
+        self._thread.started.connect(  # 线程启动时
+            lambda fp=file_path_str: self._worker.load(fp)  # 参数默认值捕获，避免 self._worker 间接引用
+        )  # 闭包
 
         self._thread.start()  # 启动线程
 
