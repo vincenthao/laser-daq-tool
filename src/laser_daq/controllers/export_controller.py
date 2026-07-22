@@ -52,6 +52,12 @@ class ExportController(QObject):
             self.export_error.emit("没有数据可以导出，请先导入 CSV")
             return
 
+        # ---- 清理上一次的线程和 worker ----
+        # 旧线程已完成时通过 finished→deleteLater 自清理
+        # 此处只断开 Python 引用，不访问 C++ 对象（可能已被 Qt 销毁）
+        self._thread = None  # 释放旧线程引用
+        self._worker = None  # 释放旧 worker 引用
+
         try:  # 捕获异常
             out_path = Path(str(output_dir))  # 确保是 Path 对象
 
@@ -181,20 +187,21 @@ class ExportController(QObject):
             elif ann.data_type == DataType.TARGET:
                 target_items.append((col_name, ann.name, ann.unit))
 
-        # 配对策略：优先名称匹配（ACTUAL→TARGET），否则同 slot 内一一配对
+        # 配对策略：优先名称匹配（ACTUAL→TARGET），否则按顺序一一配对
+        available_targets: list[tuple[str, str, str]] = list(target_items)  # 可消耗的目标列表
         for act_col, act_name, act_unit in actual_items:
             from laser_daq.models.annotation import QuantityCatalog
             matched_tgt = None  # 匹配的目标列名
             # 先尝试名称约定匹配
             target_hint = QuantityCatalog.target_for_actual(act_name)
             if target_hint:
-                for tgt_col, tgt_name, tgt_unit in target_items:
+                for i, (tgt_col, tgt_name, tgt_unit) in enumerate(available_targets):  # 带索引遍历
                     if tgt_name == target_hint:  # 精确匹配 target 名称
-                        matched_tgt = tgt_col
+                        matched_tgt = available_targets.pop(i)[0]  # 取出并移除已匹配项
                         break
-            # 若未匹配，取第一个可用的 target
-            if matched_tgt is None and target_items:
-                matched_tgt = target_items[0][0]  # 取第一个目标值列
+            # 若未匹配，取第一个可用的 target 并移除
+            if matched_tgt is None and available_targets:
+                matched_tgt = available_targets.pop(0)[0]  # 取第一个并从列表移除
 
             if matched_tgt and matched_tgt in pivot_df.columns:
                 dev_name = act_name.replace("ACTUAL", "DEV")

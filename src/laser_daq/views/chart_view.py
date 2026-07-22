@@ -49,6 +49,14 @@ class ChartView(QWidget):
         # 初始空图
         self._draw_placeholder()  # 占位提示
 
+    def set_data_model(self, model: DataModel) -> None:
+        """更新数据模型引用（导入完成后由 MainWindow 调用）.
+
+        Args:
+            model: 新的 DataModel 实例
+        """  # 方法文档
+        self._data_model = model  # 更新引用
+
     def update_for_selection(self, node_id: int, slot: int,
                               func_group: str = "", tp: int = 0) -> None:
         """根据设备树选择更新图表.
@@ -86,7 +94,7 @@ class ChartView(QWidget):
         ax.set_xticks([])  # 隐藏刻度
         ax.set_yticks([])  # 隐藏刻度
         self._figure.tight_layout()  # 紧凑布局
-        self._canvas.draw_idle()  # 空闲时重绘
+        self._canvas.draw()  # 强制重绘（Tab 内需要同步刷新）
 
     def _plot_slot_overview(self, slot_df: pd.DataFrame,
                              node_id: int, slot: int) -> None:
@@ -113,7 +121,7 @@ class ChartView(QWidget):
         ax.legend(fontsize=7, loc="upper right")  # 小字号图例
         ax.grid(True, alpha=0.3)  # 网格线
         self._figure.tight_layout()  # 紧凑布局
-        self._canvas.draw_idle()  # 空闲时重绘
+        self._canvas.draw()  # 强制重绘
 
     def _plot_single_measurement(self, slot_df: pd.DataFrame,
                                    func_group: str, tp: int,
@@ -149,4 +157,4 @@ class ChartView(QWidget):
         ax.legend(fontsize=9)  # 图例
         ax.grid(True, alpha=0.3)  # 网格线
         self._figure.tight_layout()  # 紧凑布局
-        self._canvas.draw_idle()  # 空闲时重绘
+        self._canvas.draw()  # 强制重绘（Tab 内需要同步刷新）

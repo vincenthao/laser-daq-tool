@@ -40,6 +40,14 @@ class StatsPanel(QWidget):
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)  # 只读
         layout.addWidget(self._table)  # 添加表格
 
+    def set_data_model(self, model: DataModel) -> None:
+        """更新数据模型引用（导入完成后由 MainWindow 调用）.
+
+        Args:
+            model: 新的 DataModel 实例
+        """  # 方法文档
+        self._data_model = model  # 更新引用
+
     def update_for_selection(self, node_id: int, slot: int,
                               func_group: str = "", tp: int = 0) -> None:
         """根据设备树选择更新统计信息.

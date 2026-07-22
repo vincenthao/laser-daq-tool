@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal
 
 from laser_daq.models.annotation import Annotation, QuantityCatalog
+from laser_daq.models.data_model import DataModel  # 数据模型（查找已保存标注）
 from laser_daq.constants import DataType, UNIT_OPTIONS
 
 
@@ -23,13 +24,15 @@ class AnnotationPanel(QWidget):
     annotation_changed = pyqtSignal(int, int, str, int, object)  # V2: 含 func_group
     apply_all_requested = pyqtSignal(int, int, str, int, object)  # V2: 含 func_group
 
-    def __init__(self, parent: QWidget = None) -> None:
+    def __init__(self, data_model: DataModel, parent: QWidget = None) -> None:
         """初始化 AnnotationPanel.
 
         Args:
+            data_model: 共享的 DataModel 实例，用于查询已保存标注
             parent: Qt 父控件
         """  # 构造函数文档
         super().__init__(parent)
+        self._data_model: DataModel = data_model  # 持有数据模型引用（查询已保存标注）
         self._current_key: tuple[int, int, str, int] = (0, 0, "", 0)  # V2: (node_id, slot, func_group, tp)
 
         layout: QVBoxLayout = QVBoxLayout(self)
@@ -110,6 +113,9 @@ class AnnotationPanel(QWidget):
     def load_annotation(self, node_id: int, slot: int, func_group: str, tp: int) -> None:
         """从现有标注或默认值填充表单 (V2).
 
+        Slot 级别选择（func_group="" 且 tp=-1）时禁用面板.
+        优先使用已保存的标注，未保存时回退到 QuantityCatalog 默认值.
+
         Args:
             node_id: 设备节点 ID
             slot: 槽位索引
@@ -117,23 +123,37 @@ class AnnotationPanel(QWidget):
             tp: 类型码值
         """  # 方法文档
         self._current_key = (node_id, slot, func_group, tp)
+
+        # Slot 级别选择 — 禁用面板，提示用户展开
+        if func_group == "" and tp == -1:
+            self._header_label.setText(
+                f"设备 {node_id}  |  Slot {slot} — 请展开选择具体 (func, tp)"
+            )
+            self._header_label.setStyleSheet("color: #999; font-size: 12px;")
+            self.setEnabled(False)
+            return
+
         self._header_label.setText(
             f"设备 {node_id}  |  Slot {slot}  |  {func_group} tp={tp}"
         )
         self._header_label.setStyleSheet("color: #333; font-size: 12px; font-weight: bold;")
 
-        # V2: 使用 (func_group, tp) 获取默认标注
-        default = QuantityCatalog.get_default_annotation(func_group, tp)
+        # 优先从 DataModel 中查找已保存的标注
+        existing = self._data_model.get_annotation(node_id, slot, func_group, tp)
+        if existing is not None:  # 有已保存标注，使用已有值
+            ann = existing
+        else:  # 无已保存标注，使用 QuantityCatalog 默认值
+            ann = QuantityCatalog.get_default_annotation(func_group, tp)
 
         self._block_signals(True)
-        self._name_combo.setCurrentText(default.name)
-        self._unit_combo.setCurrentText(default.unit)
+        self._name_combo.setCurrentText(ann.name)
+        self._unit_combo.setCurrentText(ann.unit)
         type_map = {"actual": 0, "target": 1, "other": 2}
-        idx = type_map.get(default.data_type.value, 2)
+        idx = type_map.get(ann.data_type.value, 2)
         btn = self._type_group.button(idx)
         if btn:
             btn.setChecked(True)
-        self._training_check.setChecked(default.include_in_training)
+        self._training_check.setChecked(ann.include_in_training)
         self._block_signals(False)
 
         self.setEnabled(True)
@@ -144,7 +164,7 @@ class AnnotationPanel(QWidget):
             return
 
         node_id, slot, func_group, tp = self._current_key
-        if node_id == 0 and slot == 0 and not func_group:
+        if not func_group or tp == -1:  # Slot 级别选择，忽略
             return
 
         type_map = {0: "actual", 1: "target", 2: "other"}
@@ -166,7 +186,7 @@ class AnnotationPanel(QWidget):
     def _on_apply_all(self) -> None:
         """批量应用按钮 — 发射 apply_all_requested (V2)."""
         node_id, slot, func_group, tp = self._current_key
-        if node_id == 0 and slot == 0 and not func_group:
+        if not func_group or tp == -1:  # Slot 级别选择，忽略
             return
 
         type_map = {0: "actual", 1: "target", 2: "other"}
