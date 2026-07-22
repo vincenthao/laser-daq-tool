@@ -3,7 +3,7 @@
 from __future__ import annotations  # 延迟注解求值
 
 from pathlib import Path  # 路径类型
-from typing import Optional, cast  # 可选类型 + 类型转换
+from typing import cast  # 类型转换
 
 from PyQt6.QtWidgets import (  # Qt 控件
     QMainWindow, QSplitter, QTabWidget, QMenuBar, QMenu, QStatusBar,  # 主窗口组件
@@ -54,15 +54,15 @@ class MainWindow(QMainWindow):
             self._data_model, self  # 传入数据模型
         )  # 导出控制器
 
-        # ---- 视图（先声明类型，_setup_* 中赋值）----
-        self._import_panel: Optional[ImportPanel] = None  # _setup_central_widget 中赋值
-        self._preview_table: Optional[PreviewTable] = None  # _setup_central_widget 中赋值
-        self._device_tree: Optional[DeviceTree] = None  # _setup_central_widget 中赋值
-        self._annotation_panel: Optional[AnnotationPanel] = None  # _setup_central_widget 中赋值
-        self._chart_view: Optional[ChartView] = None  # _setup_central_widget 中赋值
-        self._stats_panel: Optional[StatsPanel] = None  # _setup_central_widget 中赋值
-        self._status_progress: Optional[QProgressBar] = None  # _setup_status_bar 中赋值
-        self._status_label: Optional[QLabel] = None  # _setup_status_bar 中赋值
+        # ---- 视图（由 _setup_* 方法中赋值，Pylance 自动推断类型）----
+        self._import_panel = None  # 见 _setup_central_widget
+        self._preview_table = None  # 见 _setup_central_widget
+        self._device_tree = None  # 见 _setup_central_widget
+        self._annotation_panel = None  # 见 _setup_central_widget
+        self._chart_view = None  # 见 _setup_central_widget
+        self._stats_panel = None  # 见 _setup_central_widget
+        self._status_progress = None  # 见 _setup_status_bar
+        self._status_label = None  # 见 _setup_status_bar
 
         # ---- 构建界面 ----
         self._setup_menu_bar()  # 菜单栏

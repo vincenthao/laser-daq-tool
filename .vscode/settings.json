@@ -10,5 +10,5 @@
         "-v"
     ],
     "python.testing.unittestEnabled": false,
-    "python.analysis.autoImportCompletions": true
+    "python.analysis.autoImportCompletions": false
 }
