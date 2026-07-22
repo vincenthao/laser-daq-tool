@@ -39,77 +39,69 @@ class DeviceTree(QTreeView):
                     device_types: dict[int, DeviceType],
                     annotations: dict[tuple[int, int, str, int], Annotation],
                     raw_df: pd.DataFrame) -> None:
-        """根据当前数据状态重建树 (V2).
+        """根据当前数据状态重建树.
+
+        直接从 raw_df 读取 node_id/slot/func/tp，不显示设备类型推测.
 
         Args:
-            device_types: node_id -> DeviceType 映射
-            annotations: (node_id, slot, func_group, tp) -> Annotation 映射 (V2 key)
-            raw_df: 原始窄表 DataFrame (V2: 含 func, tp 列)
+            device_types: 保留参数兼容，但不在树中显示
+            annotations: (node_id, slot, func_group, tp) -> Annotation 映射
+            raw_df: 原始窄表 DataFrame
         """  # 方法文档
         self._model.clear()  # 清空模型
-        self._model.setHorizontalHeaderLabels(["设备 / Slot / (func, tp)"])  # V2 表头
+        self._model.setHorizontalHeaderLabels(["设备 / Slot / (func, tp)"])  # 表头
 
-        if not device_types:  # 无设备
+        if raw_df.empty:  # 无数据
             return  # 返回空树
 
-        # 按设备类型名称分组
-        type_groups: dict[str, list[DeviceType]] = {}
-        for dt in device_types.values():
-            type_groups.setdefault(dt.name, []).append(dt)
+        # 直接从数据读取 node_id 列表
+        node_ids = sorted(raw_df["node_id"].unique())  # 所有唯一 node_id
 
-        for type_name, devices in sorted(type_groups.items()):
-            # 类型级别项
-            type_item = QStandardItem(f"{type_name}")
-            type_item.setEditable(False)
-            type_item.setData("type", Qt.ItemDataRole.UserRole)
-            bold_font = type_item.font()
-            bold_font.setBold(True)
-            type_item.setFont(bold_font)
-            self._model.appendRow(type_item)
+        for node_id in node_ids:  # 遍历每个设备
+            node_id_int = int(node_id)  # 确保 int 类型
+            node_df = raw_df[raw_df["node_id"] == node_id_int]  # 该设备数据
 
-            for dt in sorted(devices, key=lambda d: d.node_id):
-                # 设备级别项
-                device_item = QStandardItem(
-                    f"设备 {dt.node_id} — {dt.name}"
-                )
-                device_item.setEditable(False)
-                device_item.setData(("device", dt.node_id), Qt.ItemDataRole.UserRole)
-                type_item.appendRow(device_item)
+            # 设备级别项（直接显示 node_id，不做类型推测）
+            device_item = QStandardItem(f"设备 {node_id_int}")  # 简洁标识
+            device_item.setEditable(False)  # 不可编辑
+            device_item.setData(("device", node_id_int), Qt.ItemDataRole.UserRole)  # 存储数据
+            bold_font = device_item.font()  # 获取字体
+            bold_font.setBold(True)  # 加粗
+            device_item.setFont(bold_font)  # 设置字体
+            self._model.appendRow(device_item)  # 直接添加到根
 
-                # V2: 获取此设备的 slot + func + tp 数据
-                node_df = raw_df[raw_df["node_id"] == dt.node_id]
-                slots_in_data = sorted(node_df["slot"].unique())
+            slots_in_data = sorted(node_df["slot"].unique())  # 该设备的 slot 列表
 
-                for slot in slots_in_data:
-                    slot_item = QStandardItem(f"Slot {slot}")
-                    slot_item.setEditable(False)
-                    slot_item.setData(("slot", dt.node_id, slot), Qt.ItemDataRole.UserRole)
-                    device_item.appendRow(slot_item)
+            for slot in slots_in_data:  # 遍历每个 slot
+                slot_int = int(slot)  # 确保 int 类型
+                slot_item = QStandardItem(f"Slot {slot_int}")  # Slot 项
+                slot_item.setEditable(False)  # 不可编辑
+                slot_item.setData(("slot", node_id_int, slot_int), Qt.ItemDataRole.UserRole)
+                device_item.appendRow(slot_item)  # 添加到设备下
 
-                    # V2: 获取此 slot 的 (func, tp) 数据
-                    slot_df = node_df[node_df["slot"] == slot]
-                    # 构建 (func, tp) 对唯一列表
-                    tp_pairs = list(slot_df.groupby(["func", "tp"]).size().index)
-                    for func_group, tp_val in sorted(tp_pairs, key=lambda x: (x[0], x[1])):
-                        tp_item = QStandardItem()
-                        tp_item.setEditable(False)
-                        # V2: 存储四元组
-                        tp_item.setData((dt.node_id, slot, func_group, tp_val),
-                                      Qt.ItemDataRole.UserRole)
+                # 获取此 slot 的 (func, tp) 组合
+                slot_df = node_df[node_df["slot"] == slot_int]  # 筛选 slot 数据
+                tp_pairs = list(slot_df.groupby(["func", "tp"]).size().index)  # 去重 (func, tp) 对
+                for func_group, tp_val in sorted(tp_pairs, key=lambda x: (x[0], x[1])):  # 排序
+                    tp_val_int = int(tp_val)  # 确保 int 类型
+                    tp_item = QStandardItem()  # 叶子项
+                    tp_item.setEditable(False)  # 不可编辑
+                    tp_item.setData((node_id_int, slot_int, func_group, tp_val_int),
+                                  Qt.ItemDataRole.UserRole)  # 四元组
 
-                        # 查找标注
-                        ann = annotations.get((dt.node_id, slot, func_group, tp_val))
-                        if ann:  # 有标注
-                            tp_item.setText(f"{func_group} tp={tp_val} — {ann.name} ({ann.unit})")
-                            if ann.include_in_training:
-                                tp_item.setIcon(_make_icon(QColor("#27ae60")))  # 绿色圆
-                            else:
-                                tp_item.setIcon(_make_icon(QColor("#f39c12")))  # 橙色圆
-                        else:  # 未标注
-                            tp_item.setText(f"{func_group} tp={tp_val}")
-                            tp_item.setIcon(_make_icon(QColor("#e74c3c")))  # 红色圆
+                    # 查找标注
+                    ann = annotations.get((node_id_int, slot_int, func_group, tp_val_int))
+                    if ann:  # 有标注
+                        tp_item.setText(f"{func_group} tp={tp_val_int} — {ann.name} ({ann.unit})")
+                        if ann.include_in_training:  # 纳入训练
+                            tp_item.setIcon(_make_icon(QColor("#27ae60")))  # 绿色圆
+                        else:  # 不纳入
+                            tp_item.setIcon(_make_icon(QColor("#f39c12")))  # 橙色圆
+                    else:  # 未标注
+                        tp_item.setText(f"{func_group} tp={tp_val_int}")
+                        tp_item.setIcon(_make_icon(QColor("#e74c3c")))  # 红色圆
 
-                        slot_item.appendRow(tp_item)
+                    slot_item.appendRow(tp_item)  # 添加到 slot 下
 
         self.expandAll()  # 展开所有节点
 
