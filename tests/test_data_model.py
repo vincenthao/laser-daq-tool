@@ -1,4 +1,4 @@
-"""测试 DataModel — 核心状态容器."""  # 模块文档字符串
+"""测试 DataModel (V2) — 核心状态容器."""  # 模块文档字符串
 
 from __future__ import annotations  # 延迟注解求值
 
@@ -13,104 +13,118 @@ from laser_daq.constants import DataType  # 数据类型
 
 
 class TestDataModelValidation:  # 验证方法测试组
-    """测试 validate_columns 和 deduplicate 静态方法."""  # 类文档
+    """测试 validate_columns 和 deduplicate 静态方法 (V2)."""  # 类文档
 
-    def test_validate_good_columns(self) -> None:
-        """验证包含所有必需列时不报错."""
-        df = pd.DataFrame(columns=["uptime", "node_id", "slot", "tc", "val"])  # 完整列
-        missing = DataModel.validate_columns(df)  # 验证
-        assert len(missing) == 0  # 应无缺失
+    def test_validate_good_columns_v2(self) -> None:
+        """验证包含所有 V2 必需列时不报错."""
+        df = pd.DataFrame(columns=["uptime", "node_id", "slot", "func", "tp", "val_float"])
+        missing = DataModel.validate_columns(df)
+        assert len(missing) == 0
 
-    def test_validate_missing_columns(self) -> None:
-        """验证缺少列时正确报告."""
+    def test_validate_missing_columns_v2(self) -> None:
+        """验证 V2 缺少列时正确报告."""
         df = pd.DataFrame(columns=["uptime", "node_id"])  # 仅两列
-        missing = DataModel.validate_columns(df)  # 验证
-        assert "slot" in missing  # 缺少 slot
-        assert "tc" in missing  # 缺少 tc
-        assert "val" in missing  # 缺少 val
-        assert len(missing) == 3  # 共缺少 3 列
+        missing = DataModel.validate_columns(df)
+        assert len(missing) == 4  # 缺少 slot, func, tp, val_float
 
     def test_deduplicate_removes_dupes(self) -> None:
         """验证去重逻辑 — 删除完全重复行."""
-        df = pd.DataFrame({  # 含重复行的数据
-            "uptime": [1, 1, 2],  # 第1、2行完全相同
+        df = pd.DataFrame({
+            "uptime": [1, 1, 2],
             "node_id": [2, 2, 2],
             "slot": [0, 0, 0],
-            "tc": [2, 2, 5],
-            "val": [25.1, 25.1, 0.75],
-        })  # 构建数据
-        result = DataModel.deduplicate(df)  # 去重
+            "func": ["RPTTEMP", "RPTTEMP", "RPTTEMP"],
+            "tp": [21, 21, 24],
+            "val_float": [25.1, 25.1, 0.75],
+        })
+        result = DataModel.deduplicate(df)
         assert len(result) == 2  # 应剩余 2 行
 
 
-class TestDataModelMutators:  # 变更方法测试组
+class TestDataModelMutators:  # 变更方法测试组 (V2)
     """测试 set_raw_data 和 set_annotation."""  # 类文档
 
     def test_set_raw_data_resets_state(self) -> None:
         """验证 set_raw_data 清除旧的 device_types 和 annotations."""
-        model = DataModel()  # 创建实例
-        df = pd.DataFrame({  # 基础数据
-            "uptime": [0], "node_id": [2], "slot": [0], "tc": [2], "val": [25.0],
-        })  # 一行数据
-        model.set_raw_data(df, Path("/tmp/test.csv"))  # 设置数据
-        assert model.is_loaded  # 应标记为已加载
-        assert model.source_path == Path("/tmp/test.csv")  # 源路径应正确
+        model = DataModel()
+        df = pd.DataFrame({
+            "uptime": [0], "node_id": [2], "slot": [0],
+            "func": ["RPTTEMP"], "tp": [21], "val_float": [25.0],
+        })
+        model.set_raw_data(df, Path("/tmp/test.csv"))
+        assert model.is_loaded
+        assert model.source_path == Path("/tmp/test.csv")
 
-    def test_set_annotation_and_retrieve(self) -> None:
-        """验证标注的存储和检索."""
-        model = DataModel()  # 创建实例
-        ann = Annotation(  # 创建标注
-            node_id=2, slot=0, tc=2, name="C_ACTUAL",
-            unit="mA", data_type=DataType.ACTUAL,
-        )  # 实际电流标注
-        model.set_annotation(2, 0, 2, ann)  # 存储标注
-        retrieved = model.get_annotation(2, 0, 2)  # 检索标注
-        assert retrieved is not None  # 应存在
-        assert retrieved.name == "C_ACTUAL"  # 名称应匹配
-        assert retrieved.unit == "mA"  # 单位应匹配
-        assert retrieved.data_type == DataType.ACTUAL  # 类型应匹配
+    def test_set_annotation_v2(self) -> None:
+        """验证 V2 标注的存储和检索 (含 func_group)."""
+        model = DataModel()
+        ann = Annotation(
+            node_id=2, slot=0, func_group="RPTTEMP", tp=21,
+            name="T1_ACTUAL", unit="C", data_type=DataType.ACTUAL,
+        )
+        model.set_annotation(2, 0, "RPTTEMP", 21, ann)
+        retrieved = model.get_annotation(2, 0, "RPTTEMP", 21)
+        assert retrieved is not None
+        assert retrieved.name == "T1_ACTUAL"
+        assert retrieved.func_group == "RPTTEMP"
+        assert retrieved.tp == 21
 
     def test_get_nonexistent_annotation(self) -> None:
         """验证不存在的标注返回 None."""
-        model = DataModel()  # 创建空实例
-        assert model.get_annotation(99, 0, 1) is None  # 应返回 None
+        model = DataModel()
+        assert model.get_annotation(99, 0, "RPTCURR", 8) is None
 
 
-class TestDataModelQueries:  # 查询方法测试组
+class TestDataModelQueries:  # 查询方法测试组 (V2)
     """测试 get_slot_data 和 get_unique_combinations."""  # 类文档
 
     def test_get_slot_data(self, narrow_df: pd.DataFrame) -> None:
-        """验证按 node_id, slot 筛选数据."""
-        model = DataModel()  # 创建实例
-        model.set_raw_data(narrow_df, Path("/tmp/test.csv"))  # 设置数据
-        slot_data = model.get_slot_data(4, 0)  # 获取 slot 数据
+        """验证按 node_id, slot 筛选数据 (V2)."""
+        model = DataModel()
+        model.set_raw_data(narrow_df, Path("/tmp/test.csv"))
+        slot_data = model.get_slot_data(4, 0)
         assert len(slot_data) == 6  # 应有 6 行
-        assert all(slot_data["node_id"] == 4)  # 所有行 node_id 应为 4
-        assert all(slot_data["slot"] == 0)  # 所有行 slot 应为 0
+        assert all(slot_data["node_id"] == 4)
+        assert all(slot_data["slot"] == 0)
 
-    def test_get_unique_combinations(self, narrow_df: pd.DataFrame) -> None:
-        """验证唯一组合统计."""
-        model = DataModel()  # 创建实例
-        model.set_raw_data(narrow_df, Path("/tmp/test.csv"))  # 设置数据
-        combos = model.get_unique_combinations()  # 获取组合
-        assert len(combos) == 3  # tc=1,2,3 共 3 个组合
-        # 验证 count 列存在
-        assert "count" in combos.columns  # 应有 count 列
+    def test_get_slot_data_filtered_by_func(self, narrow_df: pd.DataFrame) -> None:
+        """验证 V2 可选按 func_group 筛选."""
+        model = DataModel()
+        model.set_raw_data(narrow_df, Path("/tmp/test.csv"))
+        slot_data = model.get_slot_data(4, 0, func_group="RPTCURR")
+        assert all(slot_data["func"] == "RPTCURR")
 
-    def test_get_annotations_for_slot(self, annotated_model: DataModel) -> None:
-        """验证按 slot 获取所有标注."""
-        anns = annotated_model.get_annotations_for_slot(4, 0)  # 获取 slot 0 的标注
-        assert len(anns) == 3  # tc=1,2,3 共 3 个标注
-        assert 1 in anns  # tc=1 应存在
-        assert anns[1].name == "C_TARGET"  # tc=1 应为 C_TARGET
+    def test_get_unique_combinations_v2(self, narrow_df: pd.DataFrame) -> None:
+        """验证 V2 唯一组合统计 (含 func 列)."""
+        model = DataModel()
+        model.set_raw_data(narrow_df, Path("/tmp/test.csv"))
+        combos = model.get_unique_combinations()
+        assert "func" in combos.columns  # V2: func 列
+        assert "tp" in combos.columns  # V2: tp 列
+        assert len(combos) == 3  # (RPTCURR,14), (RPTCURR,8), (RPTCURR,9)
+
+    def test_get_annotations_for_slot_v2(self, annotated_model: DataModel) -> None:
+        """验证按 slot 获取所有标注 (V2: 键为 (func,tp))."""
+        anns = annotated_model.get_annotations_for_slot(4, 0)
+        assert len(anns) == 3
+        assert ("RPTCURR", 14) in anns
+        assert anns[("RPTCURR", 14)].name == "C_TARGET"
+
+    def test_get_tp_signature_v2(self, sample_dataframe: pd.DataFrame) -> None:
+        """验证 V2 (func, tp) 签名."""
+        model = DataModel()
+        model.set_raw_data(sample_dataframe, Path("/tmp/test.csv"))
+        sig = model.get_tp_signature(2)  # node 2 是种子源
+        assert ("RPTTEMP", 21) in sig
+        assert ("RPTTEMP", 24) in sig
 
     def test_get_grouped_devices(self, sample_dataframe: pd.DataFrame) -> None:
-        """验证按设备类型分组."""
-        from laser_daq.models.device_type import TypeDetector  # 设备类型检测
-        model = DataModel()  # 创建实例
-        model.set_raw_data(sample_dataframe, Path("/tmp/test.csv"))  # 设置数据
-        dts = TypeDetector.discover(sample_dataframe)  # 发现设备
-        model.set_device_types(dts)  # 设置设备类型
-        grouped = model.get_grouped_devices()  # 获取分组
-        assert "S001_Seed_Source" in grouped  # 应有种子源
-        assert "BC01_Current_Board" in grouped  # 应有电流板
+        """验证按设备类型分组 (V2)."""
+        from laser_daq.models.device_type import TypeDetector
+        model = DataModel()
+        model.set_raw_data(sample_dataframe, Path("/tmp/test.csv"))
+        dts = TypeDetector.discover(sample_dataframe)
+        model.set_device_types(dts)
+        grouped = model.get_grouped_devices()
+        assert "S001_Seed_Source" in grouped
+        assert "BC01_Current_Board" in grouped

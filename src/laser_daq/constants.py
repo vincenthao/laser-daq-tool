@@ -9,15 +9,22 @@ from typing import ClassVar  # 类变量类型注解
 # =============================================================================
 
 APP_NAME: str = "Laser DAQ Annotation Tool"  # 应用显示名称
-APP_VERSION: str = "0.1.0"  # 应用版本号
+APP_VERSION: str = "0.2.0"  # 应用版本号（V2 CSV 格式适配）
 APP_ORG: str = "LaserDAQ"  # 组织名称（用于 QSettings）
 
 # =============================================================================
-# CSV 导入配置
+# CSV 导入配置 (V2 格式 — K64 主动上报)
 # =============================================================================
 
-REQUIRED_COLUMNS: list[str] = ["uptime", "node_id", "slot", "tc", "val"]  # 窄表必须包含的 5 列
+# V2 窄表必须包含的 6 列
+# func: 功能组 (RPTCURR=电流主动上报, RPTTEMP=温度主动上报, RPTREGS=寄存器读响应)
+# tp:   类型码 (0~27)，与 func 一起唯一确定物理量
+# val_float: IEEE 754 单精度浮点值
+REQUIRED_COLUMNS: list[str] = ["uptime", "node_id", "slot", "func", "tp", "val_float"]  # V2 格式 6 列
 PREVIEW_ROW_LIMIT: int = 100  # 预览表格默认显示行数
+
+# 需要过滤掉的功能组（这些不是测量数据）
+EXCLUDED_FUNC_GROUPS: list[str] = ["RPTREGS"]  # 寄存器读响应，不是主动上报数据
 
 # =============================================================================
 # 数据类型枚举
@@ -31,48 +38,57 @@ class DataType(Enum):
     OTHER = "other"      # 辅助量（如 TEC PWM 占空比、状态值）
 
 # =============================================================================
-# 已知物理量定义
+# 已知物理量定义 (V2: 用 func+tp 组合键)
 # =============================================================================
 
 class KnownQuantity:
-    """固件已知会发出的 typecode 描述."""  # 类文档
+    """固件已知会发出的类型码 (func, tp) 描述."""  # 类文档
 
-    __slots__ = ("tc", "default_name", "default_unit", "default_type",
+    __slots__ = ("tp", "default_name", "default_unit", "default_type",
                  "func_group", "description")  # 固定属性集，节省内存
 
     def __init__(
-        self, tc: int, default_name: str, default_unit: str,
+        self, tp: int, default_name: str, default_unit: str,
         default_type: DataType, func_group: str, description: str = "",
     ) -> None:
         """初始化已知物理量条目.
 
         Args:
-            tc: typecode 值（固件协议中的类型编码）
+            tp: 类型码值 (0~27，与 func_group 一起唯一确定物理量)
             default_name: 默认物理量名称（如 "C_ACTUAL"）
             default_unit: 默认单位（如 "mA"）
             default_type: 数据类型（ACTUAL/TARGET/OTHER）
-            func_group: 所属功能组（"RPTCURR" 或 "RPTTEMP"）
+            func_group: 所属功能组（"RPTCURR", "RPTTEMP"）
             description: 中文描述
         """  # 参数文档
-        self.tc = tc  # typecode 值
+        self.tp = tp  # 类型码值
         self.default_name = default_name  # 默认物理量名称
         self.default_unit = default_unit  # 默认单位
         self.default_type = default_type  # 数据类型
         self.func_group = func_group  # 功能组
         self.description = description  # 描述
 
-# 主物理量目录 — 以 typecode 为键索引
-KNOWN_QUANTITIES: dict[int, KnownQuantity] = {
-    1:  KnownQuantity(1,  "C_TARGET",   "mA",  DataType.TARGET, "RPTCURR", "电流目标值"),  # 电流目标
-    2:  KnownQuantity(2,  "C_ACTUAL",   "mA",  DataType.ACTUAL, "RPTCURR", "电流实际值"),  # 电流实际
-    3:  KnownQuantity(3,  "V_ACTUAL",   "mV",  DataType.ACTUAL, "RPTCURR", "LD电压"),      # LD 电压
-    4:  KnownQuantity(4,  "PWR_mW",     "mW",  DataType.ACTUAL, "RPTCURR", "LD光功率"),    # LD 光功率
-    5:  KnownQuantity(5,  "TEC_PWM",    "",    DataType.OTHER,  "RPTTEMP", "TEC PWM占空比"), # TEC PWM
-    21: KnownQuantity(21, "T_ACTUAL_1", "C",   DataType.ACTUAL, "RPTTEMP", "温度传感器1"),  # 温度1
-    24: KnownQuantity(24, "T_TEC",      "C",   DataType.OTHER,  "RPTTEMP", "TEC温度"),     # TEC 温度
-    31: KnownQuantity(31, "LD_CURR",    "mA",  DataType.ACTUAL, "RPTCURR", "LD电流监测"),  # LD 电流监测
-    32: KnownQuantity(32, "LD_VOLT",    "mV",  DataType.ACTUAL, "RPTCURR", "LD电压监测"),  # LD 电压监测
-    33: KnownQuantity(33, "LD_POWER",   "mW",  DataType.ACTUAL, "RPTCURR", "LD功率监测"),  # LD 功率监测
+# 主物理量目录 — 以 (func, tp) 为键索引 (V2 格式)
+KNOWN_QUANTITIES: dict[tuple[str, int], KnownQuantity] = {
+    # ---- RPTCURR (func=RPTCURR) — 电流类主动上报 ----
+    ("RPTCURR",  0):  KnownQuantity(0,  "C_RAW",     "mA", DataType.ACTUAL, "RPTCURR", "电流原始值"),    # 电流原始
+    ("RPTCURR",  8):  KnownQuantity(8,  "C_ACTUAL",  "mA", DataType.ACTUAL, "RPTCURR", "LD电流采样值"),   # LD 电流
+    ("RPTCURR",  9):  KnownQuantity(9,  "V_ACTUAL",  "mV", DataType.ACTUAL, "RPTCURR", "LD电压"),        # LD 电压
+    ("RPTCURR", 10):  KnownQuantity(10, "P_SUMP",    "mW", DataType.ACTUAL, "RPTCURR", "功率I×V"),       # I×V 功率
+    ("RPTCURR", 11):  KnownQuantity(11, "P_LD",      "mW", DataType.ACTUAL, "RPTCURR", "LD光功率"),      # LD 光功率
+    ("RPTCURR", 12):  KnownQuantity(12, "V_DRIVE",   "mV", DataType.ACTUAL, "RPTCURR", "驱动电压"),      # 驱动电压
+    ("RPTCURR", 13):  KnownQuantity(13, "V_VCE",     "mV", DataType.ACTUAL, "RPTCURR", "VCE电压"),       # VCE 电压
+    ("RPTCURR", 14):  KnownQuantity(14, "C_TARGET",  "mA", DataType.TARGET, "RPTCURR", "电流目标值"),    # 电流目标
+
+    # ---- RPTTEMP (func=RPTTEMP) — 温度类主动上报 ----
+    ("RPTTEMP",  0):  KnownQuantity(0,  "T_RAW",     "C",  DataType.ACTUAL, "RPTTEMP", "温度原始值"),    # 温度原始
+    ("RPTTEMP", 21):  KnownQuantity(21, "T1_ACTUAL", "C",  DataType.ACTUAL, "RPTTEMP", "T1温度采样值"),  # T1 温度
+    ("RPTTEMP", 22):  KnownQuantity(22, "T2_ACTUAL", "C",  DataType.ACTUAL, "RPTTEMP", "T2温度/湿度"),   # T2 温度
+    ("RPTTEMP", 23):  KnownQuantity(23, "T3_ACTUAL", "C",  DataType.ACTUAL, "RPTTEMP", "T3温度"),        # T3 温度
+    ("RPTTEMP", 24):  KnownQuantity(24, "TEC_PWM",   "",   DataType.OTHER,  "RPTTEMP", "TEC占空比"),     # TEC 占空比
+    ("RPTTEMP", 25):  KnownQuantity(25, "TEC_I",     "mA", DataType.ACTUAL, "RPTTEMP", "TEC电流"),       # TEC 电流
+    ("RPTTEMP", 26):  KnownQuantity(26, "TEC_V",     "mV", DataType.ACTUAL, "RPTTEMP", "TEC电压"),       # TEC 电压
+    ("RPTTEMP", 27):  KnownQuantity(27, "TEC_P",     "mW", DataType.ACTUAL, "RPTTEMP", "TEC功率"),       # TEC 功率
 }
 
 # =============================================================================
@@ -83,15 +99,21 @@ PD_PWR_NAME: str = "PD_PWR"  # PD 功率物理量名（固件尚未实现）
 PD_PWR_UNIT: str = "mW"  # PD 功率单位
 
 # =============================================================================
-# 设备类型签名
+# 设备类型签名 (V2: 用 (func, tp) 对签名)
 # =============================================================================
 
-# 键 = 设备所有 slot 的 tc 值并集（frozenset）
+# 键 = 设备所有 slot 的 (func, tp) 对并集（frozenset）
 # 值 = (显示名称, 描述)
-DEVICE_SIGNATURES: dict[frozenset[int], tuple[str, str]] = {
-    frozenset({2, 5, 24}):   ("S001_Seed_Source",   "种子源（温度+TEC）"),  # 种子源
-    frozenset({2, 3, 4}):    ("BC01_Current_Board",  "电流板（电流+电压+功率）"),  # 电流板
-    frozenset({1, 2, 3, 4}): ("BC01_Current_Board",  "电流板（含目标电流）"),  # 带目标电流的电流板
+DEVICE_SIGNATURES: dict[frozenset[tuple[str, int]], tuple[str, str]] = {
+    frozenset({("RPTTEMP", 21), ("RPTTEMP", 24)}):
+        ("S001_Seed_Source",   "种子源（温度+TEC）"),  # 种子源
+    frozenset({("RPTCURR", 8), ("RPTCURR", 9), ("RPTCURR", 10)}):
+        ("BC01_Current_Board",  "电流板（电流+电压+功率I×V）"),  # 电流板（无目标值）
+    frozenset({("RPTCURR", 8), ("RPTCURR", 9), ("RPTCURR", 10), ("RPTCURR", 14)}):
+        ("BC01_Current_Board",  "电流板（含目标电流）"),  # 电流板（含目标电流）
+    # 扩展：含 LD 光功率的电流板
+    frozenset({("RPTCURR", 8), ("RPTCURR", 9), ("RPTCURR", 10), ("RPTCURR", 11), ("RPTCURR", 14)}):
+        ("BC01_Current_Board",  "电流板（含光功率）"),  # 电流板（含 LD 光功率）
 }
 
 # =============================================================================

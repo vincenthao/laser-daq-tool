@@ -49,14 +49,17 @@ class ChartView(QWidget):
         ax.set_yticks([])  # 隐藏 y 刻度
         self._canvas.draw_idle()  # 空闲时重绘
 
-    def update_for_selection(self, node_id: int, slot: int) -> None:
+    def update_for_selection(self, node_id: int, slot: int,
+                              func_group: str = "", tp: int = 0) -> None:
         """根据设备树选择更新图表（V0.3 实现）.
 
         Args:
             node_id: 设备节点 ID
             slot: 槽位索引
+            func_group: 功能组 (V2)
+            tp: 类型码 (V2)
         """  # 方法文档
-        # V0.1 中为 no-op，留待 V0.3 实现
+        # V0.2 中为 no-op，留待 V0.3 实现
         pass  # 占位
 
     def plot_time_series(self, x: pd.Series, y: pd.Series,
