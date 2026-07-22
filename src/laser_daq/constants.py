@@ -3,6 +3,74 @@
 from __future__ import annotations  # 延迟注解求值
 from enum import Enum  # 枚举基类
 from typing import ClassVar  # 类变量类型注解
+import platform  # 操作系统检测
+from pathlib import Path  # 路径类型（字体文件查找）
+
+# =============================================================================
+# 跨平台配置
+# =============================================================================
+
+def get_qt_cjk_fonts() -> list[str]:
+    """返回当前平台适合 QFont 使用的 CJK 字体名称列表.
+
+    按优先级排序，Qt 会自动回退到列表中的下一个可用字体.
+
+    Returns:
+        字体名称列表，第一个为最佳选择
+    """  # 函数文档
+    system = platform.system()  # 检测操作系统
+    if system == "Windows":  # Windows 平台
+        return ["Microsoft YaHei", "SimHei", "SimSun", "sans-serif"]  # 微软雅黑 > 黑体 > 宋体
+    elif system == "Darwin":  # macOS 平台
+        return ["PingFang SC", "Heiti SC", "STHeiti", "sans-serif"]  # 苹方 > 黑体 > 华文黑体
+    else:  # Linux 及其他平台
+        return ["Noto Sans CJK SC", "WenQuanYi Micro Hei", "DejaVu Sans", "sans-serif"]  # 思源 > 文泉驿
+
+
+def get_mpl_cjk_fonts() -> list[str]:
+    """返回当前平台适合 matplotlib rcParams 使用的 CJK 字体列表.
+
+    按优先级排序.
+
+    Returns:
+        字体名称列表
+    """  # 函数文档
+    system = platform.system()  # 检测操作系统
+    if system == "Windows":  # Windows 平台
+        return ["Microsoft YaHei", "SimHei", "DejaVu Sans", "sans-serif"]  # 微软雅黑 > 黑体
+    elif system == "Darwin":  # macOS 平台
+        return ["PingFang SC", "Heiti SC", "DejaVu Sans", "sans-serif"]  # 苹方 > 黑体
+    else:  # Linux 及其他平台
+        return ["Noto Sans CJK SC", "WenQuanYi Micro Hei", "DejaVu Sans", "sans-serif"]  # 思源 > 文泉驿
+
+
+def try_register_mpl_font() -> bool:
+    """尝试向 matplotlib 注册系统 CJK 字体文件.
+
+    Linux 上 Noto Sans CJK 需要手动注册 .ttc 文件路径，
+    Windows/macOS 上系统字体通常已被 matplotlib 自动发现.
+
+    Returns:
+        True 表示成功注册了额外字体
+    """  # 函数文档
+    system = platform.system()  # 检测操作系统
+    if system != "Linux":  # Windows/macOS 系统字体自动可用
+        return False  # 无需手动注册
+    try:  # 尝试导入 matplotlib 字体管理器
+        import matplotlib.font_manager as fm  # 字体管理器
+        _linux_candidate_paths = [  # Linux 上常见的 Noto CJK 字体路径
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",  # Debian/Ubuntu 默认
+            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",  # 部分发行版
+            "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",  # openSUSE 等
+            "/usr/share/fonts/opentype/noto/NotoSansSC-Regular.otf",  # 单个 OTF 变体
+        ]  # 候选路径列表
+        for fp in _linux_candidate_paths:  # 遍历尝试
+            if Path(fp).exists():  # 文件存在
+                fm.fontManager.addfont(fp)  # 注册到 matplotlib
+                return True  # 注册成功
+        return False  # 未找到可用字体文件
+    except ImportError:  # matplotlib 未安装
+        return False  # 无法注册
 
 # =============================================================================
 # 应用元数据

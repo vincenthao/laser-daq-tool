@@ -10,13 +10,11 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg  # Qt 画布
 from matplotlib.figure import Figure  # matplotlib 图形
 import pandas as pd  # 数据处理
 
-# 配置 matplotlib 中文字体 — 使用 Noto Sans CJK SC（系统字体文件）
-try:  # 尝试注册系统字体
-    _cjk_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"  # Linux 路径
-    fm.fontManager.addfont(_cjk_path)  # 注册字体
-    matplotlib.rcParams["font.sans-serif"] = ["Noto Sans CJK SC", "DejaVu Sans", "sans-serif"]  # 设置字体列表
-except (FileNotFoundError, RuntimeError):  # 字体文件不存在或注册失败
-    matplotlib.rcParams["font.sans-serif"] = ["DejaVu Sans", "sans-serif"]  # 回退
+from laser_daq.constants import get_mpl_cjk_fonts, try_register_mpl_font  # 跨平台字体辅助
+
+# 配置 matplotlib 中文字体 — 跨平台自动选择
+try_register_mpl_font()  # Linux: 尝试注册 Noto Sans CJK 字体文件; Windows/macOS: 无需操作
+matplotlib.rcParams["font.sans-serif"] = get_mpl_cjk_fonts()  # 跨平台字体列表
 matplotlib.rcParams["axes.unicode_minus"] = False  # 正确显示负号
 
 from laser_daq.models.data_model import DataModel  # 数据模型

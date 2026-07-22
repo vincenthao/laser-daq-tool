@@ -46,7 +46,7 @@ class ExportWorker(QObject):
 
             for filename, df in file_data.items():  # 遍历所有文件
                 filepath = output_path / filename  # 拼接完整路径
-                df.to_csv(filepath, index=False, na_rep="NaN")  # 写入 CSV，NaN 用字符串表示
+                df.to_csv(filepath, index=False, na_rep="NaN", encoding="utf-8")  # 写入 CSV（显式 UTF-8，跨平台中文兼容）
                 self.file_written.emit(str(filepath))  # 发射文件写入信号
                 count += 1  # 计数加一
 

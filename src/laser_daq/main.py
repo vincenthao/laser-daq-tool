@@ -10,7 +10,7 @@ from PyQt6.QtCore import Qt  # Qt 常量
 from PyQt6.QtGui import QFont  # 字体
 
 from laser_daq.views.main_window import MainWindow  # 主窗口
-from laser_daq.constants import APP_NAME, APP_ORG  # 应用元数据
+from laser_daq.constants import APP_NAME, APP_ORG, get_qt_cjk_fonts  # 应用元数据 + 跨平台字体
 
 
 def main() -> None:
@@ -27,8 +27,9 @@ def main() -> None:
     app.setApplicationName(APP_NAME)  # 设置应用名
     app.setOrganizationName(APP_ORG)  # 设置组织名
 
-    # 设置默认字体（优先使用支持中文的字体）
-    font = QFont("Noto Sans CJK SC", 10)  # 思源黑体，支持中英文
+    # 设置默认字体（跨平台：根据操作系统自动选择最佳 CJK 字体）
+    cjk_fonts = get_qt_cjk_fonts()  # 获取当前平台字体列表
+    font = QFont(cjk_fonts[0], 10)  # 首选字体，如 "Microsoft YaHei" / "PingFang SC" / "Noto Sans CJK SC"
     font.setStyleHint(QFont.StyleHint.SansSerif)  # 无此字体时回退到系统无衬线字体
     app.setFont(font)  # 全局字体
 

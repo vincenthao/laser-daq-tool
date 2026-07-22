@@ -32,6 +32,8 @@ hidden_imports = [  # 需要显式声明的导入
 
     # 标准库（某些平台可能需要）
     'encodings',  # 编码支持
+    'encodings.utf_8',  # UTF-8 编码（Windows 打包时需要）
+    'encodings.gbk',  # GBK 编码（Windows 中文环境）
     'json',  # JSON 模板
 ]
 
@@ -85,7 +87,7 @@ exe = EXE(  # 可执行文件
     upx=True,  # 启用 UPX 压缩（如果已安装）
     upx_exclude=[],  # 不排除任何文件
     runtime_tmpdir=None,  # 使用默认临时目录
-    console=True,  # 显示控制台窗口（调试用，发布时可改为 False）
+    console=True,  # 显示控制台窗口（跨平台调试用，Windows 正式发布可改为 False）
     disable_windowed_traceback=False,  # 保留错误输出
     argv_emulation=False,  # macOS 用
     target_arch=None,  # 自动检测架构

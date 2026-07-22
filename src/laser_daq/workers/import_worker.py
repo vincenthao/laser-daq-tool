@@ -88,7 +88,7 @@ class ImportWorker(QObject):
             if path.suffix.lower() != ".csv":  # 非 CSV 文件
                 raise ValueError(f"不是 CSV 文件: {path.name}")
 
-            df: pd.DataFrame = pd.read_csv(path)  # 读取 CSV
+            df: pd.DataFrame = pd.read_csv(path, encoding="utf-8")  # 读取 CSV（显式 UTF-8，保证跨平台中文兼容）
 
             # 验证必需列 (V2: 6 列)
             missing: list[str] = [c for c in REQUIRED_COLUMNS if c not in df.columns]
