@@ -45,24 +45,23 @@ class MainWindow(QMainWindow):
         self._data_model: DataModel = DataModel()  # 核心状态容器
 
         # ---- 控制器 ----
-        self._import_ctrl: ImportController = ImportController(self)  # 导入管道
-        self._discovery_ctrl: DiscoveryController = DiscoveryController(self)  # 设备发现
-        self._annotation_ctrl: AnnotationController = AnnotationController(  # 标注管理
-            self._data_model, self  # 传入数据模型
-        )  # 标注控制器
-        self._export_ctrl: ExportController = ExportController(  # 导出管道
-            self._data_model, self  # 传入数据模型
-        )  # 导出控制器
+        self._import_ctrl = ImportController(self)  # 导入管道
+        self._discovery_ctrl = DiscoveryController(self)  # 设备发现
+        self._annotation_ctrl = AnnotationController(self._data_model, self)  # 标注管理
+        self._export_ctrl = ExportController(self._data_model, self)  # 导出管道
 
-        # ---- 视图（由 _setup_* 方法中赋值，Pylance 自动推断类型）----
-        self._import_panel = None  # 见 _setup_central_widget
-        self._preview_table = None  # 见 _setup_central_widget
-        self._device_tree = None  # 见 _setup_central_widget
-        self._annotation_panel = None  # 见 _setup_central_widget
-        self._chart_view = None  # 见 _setup_central_widget
-        self._stats_panel = None  # 见 _setup_central_widget
-        self._status_progress = None  # 见 _setup_status_bar
-        self._status_label = None  # 见 _setup_status_bar
+        # ---- 视图（直接创建 + 类型标注，Pylance 可正确推断）----
+        self._import_panel: ImportPanel = ImportPanel(self)  # 导入面板
+        self._device_tree: DeviceTree = DeviceTree(self)  # 设备树
+        self._preview_table: PreviewTable = PreviewTable(self)  # 预览表格
+        self._chart_view: ChartView = ChartView(self)  # 图表视图
+        self._stats_panel: StatsPanel = StatsPanel(self)  # 统计面板
+        self._annotation_panel: AnnotationPanel = AnnotationPanel(self)  # 标注面板
+        self._status_label: QLabel = QLabel("就绪")  # 状态文本
+        self._status_progress: QProgressBar = QProgressBar()  # 进度条
+        self._export_action: QAction = QAction("导出训练数据...(&E)", self)  # 导出动作
+        self._template_save_action: QAction = QAction("保存模板...", self)  # 保存模板
+        self._template_load_action: QAction = QAction("加载模板...", self)  # 加载模板
 
         # ---- 构建界面 ----
         self._setup_menu_bar()  # 菜单栏
@@ -86,14 +85,13 @@ class MainWindow(QMainWindow):
         # 文件菜单
         file_menu = cast(QMenu, menu_bar.addMenu("文件(&F)"))  # addMenu 决不返回 None
 
-        import_action: QAction = QAction("导入 CSV...(&I)", self)  # 导入动作
+        import_action = QAction("导入 CSV...(&I)", self)  # 导入动作
         import_action.setShortcut("Ctrl+O")  # 快捷键 Ctrl+O
         import_action.triggered.connect(self._on_import_action)  # 触发导入
         file_menu.addAction(import_action)  # 添加到菜单
 
         file_menu.addSeparator()  # 分隔线
 
-        self._export_action: QAction = QAction("导出训练数据...(&E)", self)  # 导出动作
         self._export_action.setShortcut("Ctrl+E")  # 快捷键 Ctrl+E
         self._export_action.triggered.connect(self._show_export_dialog)  # 触发导出对话框
         self._export_action.setEnabled(False)  # 初始禁用（无数据时）
@@ -101,15 +99,13 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()  # 分隔线
 
-        quit_action: QAction = QAction("退出(&Q)", self)  # 退出动作
+        quit_action = QAction("退出(&Q)", self)  # 退出动作
         quit_action.setShortcut("Ctrl+Q")  # 快捷键 Ctrl+Q
         quit_action.triggered.connect(self.close)  # 关闭窗口
         file_menu.addAction(quit_action)  # 添加到菜单
 
         # 模板菜单（V0.2 扩展）
         template_menu = cast(QMenu, menu_bar.addMenu("模板(&T)"))  # addMenu 决不返回 None
-        self._template_save_action: QAction = QAction("保存模板...", self)  # 保存模板
-        self._template_load_action: QAction = QAction("加载模板...", self)  # 加载模板
         self._template_save_action.setEnabled(False)  # V0.2 启用
         self._template_load_action.setEnabled(False)  # V0.2 启用
         template_menu.addAction(self._template_save_action)  # 添加保存
@@ -117,13 +113,13 @@ class MainWindow(QMainWindow):
 
         # 视图菜单
         view_menu = cast(QMenu, menu_bar.addMenu("视图(&V)"))  # addMenu 决不返回 None
-        about_action: QAction = QAction("关于(&A)", self)  # 关于动作
+        about_action = QAction("关于(&A)", self)  # 关于动作
         about_action.triggered.connect(self._show_about)  # 显示关于
         view_menu.addAction(about_action)  # 添加到视图菜单
 
     def _setup_tool_bar(self) -> None:
         """快速操作工具栏."""
-        toolbar: QToolBar = QToolBar("工具栏")  # 创建工具栏
+        toolbar = QToolBar("工具栏")  # 创建工具栏
         toolbar.setMovable(False)  # 不可移动
         self.addToolBar(toolbar)  # 添加到窗口
 
@@ -137,48 +133,30 @@ class MainWindow(QMainWindow):
     def _setup_central_widget(self) -> None:
         """构建三栏 QSplitter 布局.
 
-        布局：
-          左栏（垂直分割）：ImportPanel + DeviceTree
-          中栏（标签页）：Data(PreviewTable) | Chart | Stats
-          右栏：AnnotationPanel
+        左栏: ImportPanel + DeviceTree
+        中栏: PreviewTable | Chart | Stats (标签页)
+        右栏: AnnotationPanel
         """  # 方法文档
-        # 外部分割器（水平三栏）
-        outer_splitter: QSplitter = QSplitter(Qt.Orientation.Horizontal, self)  # 水平分割
+        outer_splitter = QSplitter(Qt.Orientation.Horizontal, self)  # 水平分割
 
         # ---- 左栏 ----
-        left_splitter: QSplitter = QSplitter(Qt.Orientation.Vertical)  # 垂直分割
-
-        self._import_panel = ImportPanel(self)  # 导入面板
+        left_splitter = QSplitter(Qt.Orientation.Vertical)  # 垂直分割
         left_splitter.addWidget(self._import_panel)  # 添加导入面板
-
-        self._device_tree = DeviceTree(self)  # 设备树
         left_splitter.addWidget(self._device_tree)  # 添加设备树
-
         left_splitter.setSizes([150, 350])  # 左栏内初始比例
         outer_splitter.addWidget(left_splitter)  # 添加到外部分割器
 
         # ---- 中栏（标签页）----
-        tab_widget: QTabWidget = QTabWidget(self)  # 标签页控件
-
-        # 数据预览标签
-        self._preview_table = PreviewTable(self)  # 预览表格
+        tab_widget = QTabWidget(self)  # 标签页控件
         tab_widget.addTab(self._preview_table, "数据预览")  # 添加数据标签
-
-        # 图表标签
-        self._chart_view = ChartView(self)  # 图表视图
         tab_widget.addTab(self._chart_view, "时序图表")  # 添加图表标签
-
-        # 统计标签
-        self._stats_panel = StatsPanel(self)  # 统计面板
         tab_widget.addTab(self._stats_panel, "统计摘要")  # 添加统计标签
-
         outer_splitter.addWidget(tab_widget)  # 添加到外部分割器
 
         # ---- 右栏 ----
-        self._annotation_panel = AnnotationPanel(self)  # 标注面板
-        outer_splitter.addWidget(self._annotation_panel)  # 添加到外部分割器
+        outer_splitter.addWidget(self._annotation_panel)  # 添加标注面板
 
-        # 设置分割比例（左:中:右 = 1:2:1）
+        # 分割比例（左:中:右 = 1:2:1）
         outer_splitter.setSizes([300, 600, 300])  # 三栏宽度
         outer_splitter.setStretchFactor(0, 1)  # 左栏弹性
         outer_splitter.setStretchFactor(1, 2)  # 中栏弹性
@@ -190,10 +168,8 @@ class MainWindow(QMainWindow):
         """状态栏 — 带进度条."""
         status = cast(QStatusBar, self.statusBar())  # QMainWindow 必定返回有效值
 
-        self._status_label = QLabel("就绪")  # 状态文本
         status.addWidget(self._status_label, 1)  # 弹性空间
 
-        self._status_progress = QProgressBar()  # 进度条
         self._status_progress.setMaximumWidth(200)  # 最大宽度 200px
         self._status_progress.setVisible(False)  # 初始隐藏
         status.addPermanentWidget(self._status_progress)  # 固定右侧
@@ -206,7 +182,6 @@ class MainWindow(QMainWindow):
         """接线所有控制器 <-> 视图信号.
 
         这是核心接线点 — 保持耦合显式可见.
-        所有信号路由在此明确定义.
         """  # 方法文档
         # ---- 导入流程 ----
         self._import_panel.file_dropped.connect(self._import_ctrl.load_csv)  # 拖拽 → 导入
@@ -261,52 +236,35 @@ class MainWindow(QMainWindow):
             self._import_panel.file_dropped.emit([Path(p) for p in paths])  # 手动发射拖拽信号
 
     def _on_import_started(self, name: str) -> None:
-        """导入开始 — 更新状态栏.
-
-        Args:
-            name: 源文件名
-        """  # 方法文档
+        """导入开始 — 更新状态栏."""
         self._status_label.setText(f"正在加载: {name}...")  # 更新状态文本
         self._status_progress.setVisible(True)  # 显示进度条
         self._status_progress.setRange(0, 0)  # 不确定模式（动画滚动条）
 
     def _on_import_finished(self, model: DataModel) -> None:
-        """导入完成 — 填充预览表格和设备树.
-
-        Args:
-            model: 已加载的 DataModel 实例
-        """  # 方法文档
+        """导入完成 — 填充预览表格和设备树."""
         self._data_model = model  # 更新本地引用
 
-        # 更新预览表格
         self._preview_table.set_data(model.raw_df)  # 显示数据
 
-        # 更新设备树
         self._device_tree.set_devices(  # 构建设备树
             model.device_types,  # 设备类型映射
             model.annotations,  # 标注映射
             model.raw_df,  # 原始数据
         )  # 设置树
 
-        # 启用导出
         self._export_action.setEnabled(True)  # 启用导出菜单
 
-        # 更新状态栏
         self._status_label.setText(  # 状态文本
             f"已加载: {model.source_path.name if model.source_path else '未知'} "
             f"({len(model.raw_df)} 行, {len(model.device_types)} 个设备)"
         )  # 显示文件名、行数、设备数
         self._status_progress.setVisible(False)  # 隐藏进度条
 
-        # 更新导入控制器内部的数据模型引用（供后续导入使用）
         self._import_ctrl._data_model = model  # 更新内部引用
 
     def _on_error(self, message: str) -> None:
-        """显示错误对话框.
-
-        Args:
-            message: 错误消息
-        """  # 方法文档
+        """显示错误对话框."""
         self._status_label.setText(f"错误: {message}")  # 状态栏显示错误
         self._status_progress.setVisible(False)  # 隐藏进度条
         QMessageBox.critical(self, "错误", message)  # 弹出错误对话框
@@ -318,7 +276,7 @@ class MainWindow(QMainWindow):
             return  # 返回
 
         device_types = list(self._data_model.get_grouped_devices().keys())  # 获取设备类型列表
-        dialog: ExportDialog = ExportDialog(device_types, self)  # 创建导出对话框
+        dialog = ExportDialog(device_types, self)  # 创建导出对话框
         dialog.export_requested.connect(self._export_ctrl.export)  # 连接导出信号
         dialog.exec()  # 模态显示
 
@@ -329,22 +287,13 @@ class MainWindow(QMainWindow):
         self._status_progress.setRange(0, 0)  # 不确定模式
 
     def _on_export_progress(self, current: int, total: int) -> None:
-        """导出进度更新.
-
-        Args:
-            current: 当前文件索引
-            total: 总文件数
-        """  # 方法文档
+        """导出进度更新."""
         if total > 0 and current > 0:  # 有效进度
             self._status_progress.setRange(0, total)  # 设置范围
             self._status_progress.setValue(current)  # 更新值
 
     def _on_export_finished(self, count: int) -> None:
-        """导出完成.
-
-        Args:
-            count: 成功导出的文件数
-        """  # 方法文档
+        """导出完成."""
         self._status_label.setText(f"导出完成: {count} 个文件")  # 更新状态
         self._status_progress.setVisible(False)  # 隐藏进度条
         QMessageBox.information(  # 成功提示
