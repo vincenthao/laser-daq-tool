@@ -65,44 +65,37 @@ class ImportController(QObject):
         self.import_started.emit(first_path.name)  # 发射开始信号
 
         # ---- 清理上一次的线程和 worker ----
-        old_thread = self._thread  # 保存旧的线程引用
-        old_worker = self._worker  # 保存旧的 worker 引用
-        if old_worker is not None:  # 有旧 worker
-            # 断开旧 worker 的所有信号，防止旧信号触发回调
-            try:  # 捕获异常（可能已断开）
-                old_worker.read_finished.disconnect()  # 断开读取完成
-                old_worker.read_error.disconnect()  # 断开读取错误
-            except TypeError:  # 信号可能已断开
-                pass  # 忽略
-            old_worker.deleteLater()  # 标记旧 worker 删除
-        if old_thread is not None:  # 有旧线程
-            if old_thread.isRunning():  # 仍在运行
-                old_thread.quit()  # 退出事件循环
-                old_thread.wait(3000)  # 等待最多3秒
-            old_thread.deleteLater()  # 标记旧线程删除
+        # 旧线程已完成时通过 finished→deleteLater 自清理
+        # 此处只断开 Python 引用，不访问 C++ 对象（可能已被 Qt 销毁）
+        self._thread = None  # 释放旧线程引用
+        self._worker = None  # 释放旧 worker 引用
 
         # ---- 创建新的工作线程 ----
-        self._thread = QThread()  # 创建 QThread（无 parent，避免旧 parent 干扰）
-        self._worker = ImportWorker()  # 创建 ImportWorker
-        self._worker.moveToThread(self._thread)  # 将 worker 移到线程
+        thread = QThread()  # 本地变量，线程结束自动清理
+        worker = ImportWorker()  # 本地变量
+        worker.moveToThread(thread)  # 将 worker 移到线程
 
-        # 连接信号（worker → 线程生命周期）
-        self._worker.read_finished.connect(self._thread.quit)  # 完成后退出线程
-        self._worker.read_error.connect(self._thread.quit)  # 错误后退出线程
-        self._thread.finished.connect(self._thread.deleteLater)  # 线程结束后清理
-        self._thread.finished.connect(self._worker.deleteLater)  # 线程结束后清理 worker
+        # 连接信号：worker 完成 → 退出线程 → 清理
+        worker.read_finished.connect(thread.quit)  # 读取成功 → 退出线程
+        worker.read_error.connect(thread.quit)  # 读取失败 → 退出线程
+        thread.finished.connect(thread.deleteLater)  # 线程结束 → 清理自身
+        thread.finished.connect(worker.deleteLater)  # 线程结束 → 清理 worker
 
-        # 连接信号（worker → 控制器回调，用 QueuedConnection 确保线程安全）
-        self._worker.read_finished.connect(self._on_worker_finished)  # 读取成功
-        self._worker.read_error.connect(self._on_worker_error)  # 读取失败
+        # 连接信号：worker → 控制器回调
+        worker.read_finished.connect(self._on_worker_finished)  # 读取成功
+        worker.read_error.connect(self._on_worker_error)  # 读取失败
 
-        # 线程启动 → 调用 worker.load（捕获 first_path 到闭包）
-        file_path_str = str(first_path)  # 转为字符串避免 Path 对象跨线程问题
-        self._thread.started.connect(  # 线程启动时
-            lambda fp=file_path_str: self._worker.load(fp)  # 参数默认值捕获，避免 self._worker 间接引用
+        # 线程启动 → 调用 worker.load
+        file_path_str = str(first_path)  # 转为字符串避免跨线程问题
+        thread.started.connect(  # 线程启动时
+            lambda fp=file_path_str: worker.load(fp)  # 用默认参数捕获，直接引用 worker
         )  # 闭包
 
-        self._thread.start()  # 启动线程
+        # 保存引用以供后续 load_csv 调用识别（但不用于清理）
+        self._thread = thread  # 保存新线程引用
+        self._worker = worker  # 保存新 worker 引用
+
+        thread.start()  # 启动线程
 
     def _on_worker_finished(self, df: pd.DataFrame, source: str) -> None:
         """ImportWorker 读取完成后的回调.
