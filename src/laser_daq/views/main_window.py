@@ -3,9 +3,10 @@
 from __future__ import annotations  # 延迟注解求值
 
 from pathlib import Path  # 路径类型
+from typing import Optional, cast  # 可选类型 + 类型转换
 
 from PyQt6.QtWidgets import (  # Qt 控件
-    QMainWindow, QSplitter, QTabWidget, QMenuBar, QStatusBar,  # 主窗口组件
+    QMainWindow, QSplitter, QTabWidget, QMenuBar, QMenu, QStatusBar,  # 主窗口组件
     QMessageBox, QToolBar, QWidget, QVBoxLayout, QLabel, QProgressBar,  # 对话框和控件
 )  # 导入
 from PyQt6.QtCore import Qt, QTimer  # Qt 常量
@@ -53,15 +54,15 @@ class MainWindow(QMainWindow):
             self._data_model, self  # 传入数据模型
         )  # 导出控制器
 
-        # ---- 视图（先创建占位，_setup_* 中填充）----
-        self._import_panel: ImportPanel = None  # 类型提示
-        self._preview_table: PreviewTable = None  # 类型提示
-        self._device_tree: DeviceTree = None  # 类型提示
-        self._annotation_panel: AnnotationPanel = None  # 类型提示
-        self._chart_view: ChartView = None  # 类型提示
-        self._stats_panel: StatsPanel = None  # 类型提示
-        self._status_progress: QProgressBar = None  # 类型提示
-        self._status_label: QLabel = None  # 类型提示
+        # ---- 视图（先声明类型，_setup_* 中赋值）----
+        self._import_panel: Optional[ImportPanel] = None  # _setup_central_widget 中赋值
+        self._preview_table: Optional[PreviewTable] = None  # _setup_central_widget 中赋值
+        self._device_tree: Optional[DeviceTree] = None  # _setup_central_widget 中赋值
+        self._annotation_panel: Optional[AnnotationPanel] = None  # _setup_central_widget 中赋值
+        self._chart_view: Optional[ChartView] = None  # _setup_central_widget 中赋值
+        self._stats_panel: Optional[StatsPanel] = None  # _setup_central_widget 中赋值
+        self._status_progress: Optional[QProgressBar] = None  # _setup_status_bar 中赋值
+        self._status_label: Optional[QLabel] = None  # _setup_status_bar 中赋值
 
         # ---- 构建界面 ----
         self._setup_menu_bar()  # 菜单栏
@@ -80,10 +81,10 @@ class MainWindow(QMainWindow):
 
     def _setup_menu_bar(self) -> None:
         """构建文件、模板、视图菜单."""
-        menu_bar: QMenuBar = self.menuBar()  # 获取菜单栏
+        menu_bar = cast(QMenuBar, self.menuBar())  # QMainWindow 必定返回有效值
 
         # 文件菜单
-        file_menu = menu_bar.addMenu("文件(&F)")  # 文件菜单
+        file_menu = cast(QMenu, menu_bar.addMenu("文件(&F)"))  # addMenu 决不返回 None
 
         import_action: QAction = QAction("导入 CSV...(&I)", self)  # 导入动作
         import_action.setShortcut("Ctrl+O")  # 快捷键 Ctrl+O
@@ -106,7 +107,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(quit_action)  # 添加到菜单
 
         # 模板菜单（V0.2 扩展）
-        template_menu = menu_bar.addMenu("模板(&T)")  # 模板菜单
+        template_menu = cast(QMenu, menu_bar.addMenu("模板(&T)"))  # addMenu 决不返回 None
         self._template_save_action: QAction = QAction("保存模板...", self)  # 保存模板
         self._template_load_action: QAction = QAction("加载模板...", self)  # 加载模板
         self._template_save_action.setEnabled(False)  # V0.2 启用
@@ -115,7 +116,7 @@ class MainWindow(QMainWindow):
         template_menu.addAction(self._template_load_action)  # 添加加载
 
         # 视图菜单
-        view_menu = menu_bar.addMenu("视图(&V)")  # 视图菜单
+        view_menu = cast(QMenu, menu_bar.addMenu("视图(&V)"))  # addMenu 决不返回 None
         about_action: QAction = QAction("关于(&A)", self)  # 关于动作
         about_action.triggered.connect(self._show_about)  # 显示关于
         view_menu.addAction(about_action)  # 添加到视图菜单
@@ -126,11 +127,11 @@ class MainWindow(QMainWindow):
         toolbar.setMovable(False)  # 不可移动
         self.addToolBar(toolbar)  # 添加到窗口
 
-        import_btn = toolbar.addAction("导入 CSV")  # 导入按钮
+        import_btn = cast(QAction, toolbar.addAction("导入 CSV"))  # addAction 决不返回 None
         import_btn.triggered.connect(self._on_import_action)  # 触发导入
         toolbar.addSeparator()  # 分隔
 
-        export_btn = toolbar.addAction("导出训练数据")  # 导出按钮
+        export_btn = cast(QAction, toolbar.addAction("导出训练数据"))  # addAction 决不返回 None
         export_btn.triggered.connect(self._show_export_dialog)  # 触发导出对话框
 
     def _setup_central_widget(self) -> None:
@@ -187,7 +188,7 @@ class MainWindow(QMainWindow):
 
     def _setup_status_bar(self) -> None:
         """状态栏 — 带进度条."""
-        status: QStatusBar = self.statusBar()  # 获取状态栏
+        status = cast(QStatusBar, self.statusBar())  # QMainWindow 必定返回有效值
 
         self._status_label = QLabel("就绪")  # 状态文本
         status.addWidget(self._status_label, 1)  # 弹性空间
