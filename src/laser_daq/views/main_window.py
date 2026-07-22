@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (  # Qt 控件
     QMainWindow, QSplitter, QTabWidget, QMenuBar, QMenu, QStatusBar,  # 主窗口组件
     QMessageBox, QToolBar, QWidget, QVBoxLayout, QLabel, QProgressBar,  # 对话框和控件
 )  # 导入
-from PyQt6.QtCore import Qt, QTimer  # Qt 常量
+from PyQt6.QtCore import Qt  # Qt 常量
 from PyQt6.QtGui import QAction  # 动作
 
 from laser_daq.views.import_panel import ImportPanel  # 导入面板
