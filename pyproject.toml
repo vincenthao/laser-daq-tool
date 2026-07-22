@@ -1,0 +1,32 @@
+[build-system]  # 构建系统配置
+requires = ["setuptools>=68.0", "wheel"]  # 构建依赖
+build-backend = "setuptools.build_meta"  # 构建后端
+
+[project]  # 项目元数据
+name = "laser-daq"  # 包名
+version = "0.1.0"  # 版本号
+description = "Laser DAQ Annotation & Training Set Generation Tool"  # 项目描述
+requires-python = ">=3.10"  # Python 版本要求
+dependencies = [  # 运行时依赖
+    "PyQt6>=6.5.0",  # GUI 框架
+    "pandas>=2.0.0",  # 数据处理
+    "matplotlib>=3.7.0",  # 图表绘制
+]
+license = {text = "MIT"}  # 开源协议
+authors = [{name = "Laser DAQ Team"}]  # 作者
+
+[project.scripts]  # 命令行入口
+laser-daq = "laser_daq.main:main"  # 安装后可用 laser-daq 命令启动
+
+[project.optional-dependencies]  # 可选依赖
+dev = [  # 开发依赖
+    "pytest>=7.0",  # 测试框架
+    "pytest-qt>=4.2",  # Qt 测试支持
+    "pyinstaller>=6.0",  # 打包工具
+]
+
+[tool.setuptools.package-data]  # 包数据配置
+"laser_daq" = ["*.py"]  # 包含所有 Python 文件
+
+[tool.setuptools.packages.find]  # 包发现配置
+where = ["src"]  # 在 src 目录下查找包
