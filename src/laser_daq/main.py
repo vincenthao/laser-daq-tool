@@ -27,9 +27,9 @@ def main() -> None:
     app.setApplicationName(APP_NAME)  # 设置应用名
     app.setOrganizationName(APP_ORG)  # 设置组织名
 
-    # 设置默认字体
-    font = QFont()  # 系统默认字体
-    font.setPointSize(10)  # 10pt 字号
+    # 设置默认字体（优先使用支持中文的字体）
+    font = QFont("Noto Sans CJK SC", 10)  # 思源黑体，支持中英文
+    font.setStyleHint(QFont.StyleHint.SansSerif)  # 无此字体时回退到系统无衬线字体
     app.setFont(font)  # 全局字体
 
     # 全局样式表
