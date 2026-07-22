@@ -117,9 +117,13 @@ class DeviceTree(QTreeView):
             return
         item: QStandardItem = self._model.itemFromIndex(current)
         data = item.data(Qt.ItemDataRole.UserRole)
-        # V2: 四元组 (node_id, slot, func_group, tp)
+        # V2: 四元组 (node_id, slot, func_group, tp) — tp 叶子节点
         if isinstance(data, tuple) and len(data) == 4 and isinstance(data[0], int):
             self.selection_changed.emit(data[0], data[1], data[2], data[3])
+            return  # 已处理
+        # V2: 三元组 ("slot", node_id, slot) — Slot 节点
+        if isinstance(data, tuple) and len(data) == 3 and data[0] == "slot":
+            self.selection_changed.emit(data[1], data[2], "", -1)  # func="" tp=-1 表示整 slot
 
 
 def _make_icon(color: QColor, size: int = 10) -> QIcon:

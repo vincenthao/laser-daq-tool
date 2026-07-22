@@ -54,8 +54,8 @@ class MainWindow(QMainWindow):
         self._import_panel: ImportPanel = ImportPanel(self)  # 导入面板
         self._device_tree: DeviceTree = DeviceTree(self)  # 设备树
         self._preview_table: PreviewTable = PreviewTable(self)  # 预览表格
-        self._chart_view: ChartView = ChartView(self)  # 图表视图
-        self._stats_panel: StatsPanel = StatsPanel(self)  # 统计面板
+        self._chart_view: ChartView = ChartView(self._data_model, self)  # 图表视图
+        self._stats_panel: StatsPanel = StatsPanel(self._data_model, self)  # 统计面板
         self._annotation_panel: AnnotationPanel = AnnotationPanel(self)  # 标注面板
         self._status_label: QLabel = QLabel("就绪")  # 状态文本
         self._status_progress: QProgressBar = QProgressBar()  # 进度条
@@ -244,6 +244,10 @@ class MainWindow(QMainWindow):
     def _on_import_finished(self, model: DataModel) -> None:
         """导入完成 — 填充预览表格和设备树."""
         self._data_model = model  # 更新本地引用
+
+        # 更新 chart/stats 的数据模型引用（它们创建时拿的是初始空实例）
+        self._chart_view._data_model = model  # 同步图表视图
+        self._stats_panel._data_model = model  # 同步统计面板
 
         self._preview_table.set_data(model.raw_df)  # 显示数据
 
