@@ -182,6 +182,11 @@ DEVICE_SIGNATURES: dict[frozenset[tuple[str, int]], tuple[str, str]] = {
     # 扩展：含 LD 光功率的电流板
     frozenset({("RPTCURR", 8), ("RPTCURR", 9), ("RPTCURR", 10), ("RPTCURR", 11), ("RPTCURR", 14)}):
         ("BC01_Current_Board",  "电流板（含光功率）"),  # 电流板（含 LD 光功率）
+    # v2 固件：激光器（电流+T1/T2/T3+TEC）
+    frozenset({("RPTCURR", 8), ("RPTCURR", 14),
+               ("RPTTEMP", 21), ("RPTTEMP", 22),
+               ("RPTTEMP", 23), ("RPTTEMP", 24)}):
+        ("Laser",  "激光器（电流+温度+TEC）"),  # 激光器 v2 固件
 }
 
 # =============================================================================
