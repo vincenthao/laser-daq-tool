@@ -160,7 +160,7 @@ class AnnotationPanel(QWidget):
 
     def _on_field_changed(self) -> None:
         """任意表单字段变更时发射 annotation_changed (V2)."""
-        if self._signalsBlocked():
+        if self.signalsBlocked():  # Qt 信号被阻止时跳过（load_annotation 中设置）
             return
 
         node_id, slot, func_group, tp = self._current_key
