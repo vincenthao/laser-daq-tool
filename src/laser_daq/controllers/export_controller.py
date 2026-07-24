@@ -286,13 +286,14 @@ class ExportController(QObject):
                 # 重命名非公用列
                 rename: dict[str, str] = {}  # 原列名 -> 新列名
                 for col in df.columns:  # 遍历所有列
-                    if col in ("sample_seq", "node_id", "uptime_avg"):  # 公用列，跳过
+                    if col in ("sample_seq", "node_id"):  # 公用对齐列，跳过
                         continue  # 不重命名
                     rename[col] = f"{col}{suffix}"  # 添加后缀
                 df_renamed = df.rename(columns=rename)  # 重命名
-                # 删除 node_id 列（合并后无意义），保留 uptime_avg
-                if "node_id" in df_renamed.columns:  # 有 node_id 列
-                    df_renamed = df_renamed.drop(columns=["node_id"])  # 删除
+                # 删除 node_id 和 uptime_avg 列（合并后无意义，且多节点合并会列名冲突）
+                for drop_col in ("node_id", "uptime_avg"):  # 需删除的列
+                    if drop_col in df_renamed.columns:  # 列存在
+                        df_renamed = df_renamed.drop(columns=[drop_col])  # 删除
 
                 if merged is None:  # 第一个 DataFrame
                     merged = df_renamed  # 直接赋值
