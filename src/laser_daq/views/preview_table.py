@@ -126,8 +126,11 @@ class PreviewTable(QTableView):
         model: PandasModel = PandasModel(df, self)  # 创建 PandasModel
         self._proxy.setSourceModel(model)  # 设置源模型
         self.setModel(self._proxy)  # 设置视图模型
-        # 默认按 uptime 升序
-        if "uptime" in df.columns:  # 有 uptime 列
+        # 默认按 sample_seq 升序（V3: sample_seq 替代 uptime 做主键）
+        if "sample_seq" in df.columns:  # V3: sample_seq 列
+            seq_col = list(df.columns).index("sample_seq")  # 找 sample_seq 列索引
+            self._proxy.sort(seq_col, Qt.SortOrder.AscendingOrder)  # 升序
+        elif "uptime" in df.columns:  # 兼容旧格式有 uptime 列
             uptime_col = list(df.columns).index("uptime")  # 找 uptime 列索引
             self._proxy.sort(uptime_col, Qt.SortOrder.AscendingOrder)  # 升序
         self.resizeColumnsToContents()  # 自动调整列宽

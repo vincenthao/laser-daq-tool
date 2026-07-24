@@ -84,11 +84,12 @@ APP_ORG: str = "LaserDAQ"  # 组织名称（用于 QSettings）
 # CSV 导入配置 (V2 格式 — K64 主动上报)
 # =============================================================================
 
-# V2 窄表必须包含的 6 列
+# V3 窄表必须包含的 6 列
+# sample_seq: 同步采集序号（同批次所有 node_id 共享，主键）
 # func: 功能组 (RPTCURR=电流主动上报, RPTTEMP=温度主动上报, RPTREGS=寄存器读响应)
 # tp:   类型码 (0~27)，与 func 一起唯一确定物理量
 # val_float: IEEE 754 单精度浮点值
-REQUIRED_COLUMNS: list[str] = ["uptime", "node_id", "slot", "func", "tp", "val_float"]  # V2 格式 6 列
+REQUIRED_COLUMNS: list[str] = ["sample_seq", "node_id", "slot", "func", "tp", "val_float"]  # V3 格式 6 列
 PREVIEW_ROW_LIMIT: int = 100  # 预览表格默认显示行数
 
 # 需要过滤掉的功能组（这些不是测量数据）

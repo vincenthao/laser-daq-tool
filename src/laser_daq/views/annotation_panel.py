@@ -94,8 +94,8 @@ class AnnotationPanel(QWidget):
         layout.addWidget(ann_group)
 
         # 应用到所有匹配按钮
-        self._apply_all_btn: QPushButton = QPushButton("应用到所有相同 (func, tp)")
-        self._apply_all_btn.setToolTip("将所有相同 func+tp 的条目也使用此标注")
+        self._apply_all_btn: QPushButton = QPushButton("应用到本设备所有相同 (func, tp)")
+        self._apply_all_btn.setToolTip("将本设备内所有相同 func+tp 的条目也使用此标注")
         layout.addWidget(self._apply_all_btn)
 
         layout.addStretch()
@@ -109,6 +109,14 @@ class AnnotationPanel(QWidget):
 
         # 初始禁用状态
         self.setEnabled(False)
+
+    def set_data_model(self, model: DataModel) -> None:
+        """更新数据模型引用（导入完成后由 MainWindow 调用）.
+
+        Args:
+            model: 新的 DataModel 实例
+        """  # 方法文档
+        self._data_model = model  # 更新引用
 
     def load_annotation(self, node_id: int, slot: int, func_group: str, tp: int) -> None:
         """从现有标注或默认值填充表单 (V2).

@@ -64,14 +64,14 @@ class ImportWorker(QObject):
             return float("nan")  # 返回 NaN
 
     def load(self, file_path: str) -> None:
-        """槽函数 — 读取 CSV 文件并验证列结构 (V2: 6 列).
+        """槽函数 — 读取 CSV 文件并验证列结构 (V3: 6 列).
 
         设计为通过信号触发或 QMetaObject.invokeMethod 调用.
 
         处理步骤:
         1. 读取 CSV
-        2. 验证 6 个必需列
-        3. 数值类型转换 (node_id, slot, tp, val_float)
+        2. 验证 6 个必需列 (sample_seq, node_id, slot, func, tp, val_float)
+        3. 数值类型转换 (sample_seq, node_id, slot, tp, val_float)
         4. func 列保留为字符串
         5. 过滤 RPTREGS 行
         6. 删除关键列为 NaN 的行
@@ -90,16 +90,16 @@ class ImportWorker(QObject):
 
             df: pd.DataFrame = pd.read_csv(path, encoding="utf-8")  # 读取 CSV（显式 UTF-8，保证跨平台中文兼容）
 
-            # 验证必需列 (V2: 6 列)
+            # 验证必需列 (V3: sample_seq, node_id, slot, func, tp, val_float)
             missing: list[str] = [c for c in REQUIRED_COLUMNS if c not in df.columns]
             if missing:  # 有缺失列
                 raise ValueError(
                     f"缺少列: {', '.join(missing)}. "
-                    f"必需列 (V2): {', '.join(REQUIRED_COLUMNS)}"
+                    f"必需列 (V3): {', '.join(REQUIRED_COLUMNS)}"
                 )
 
             # 将关键列转为数值类型，非法值转为 NaN
-            for col in ("node_id", "slot", "tp"):  # V2: tp 替代 tc
+            for col in ("sample_seq", "node_id", "slot", "tp"):  # V3: sample_seq 替代 uptime
                 df[col] = pd.to_numeric(df[col], errors="coerce")
             df["val_float"] = pd.to_numeric(df["val_float"], errors="coerce")  # V2: val_float
 

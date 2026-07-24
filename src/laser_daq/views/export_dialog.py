@@ -19,7 +19,7 @@ class ExportDialog(QDialog):
         export_requested(output_dir, selected_types): 用户确认导出
     """  # 类文档
 
-    export_requested = pyqtSignal(object, object)  # Path, list[str]
+    export_requested = pyqtSignal(object, object, bool)  # Path, list[str], merge_all_flag
 
     def __init__(self, device_type_names: list[str], parent: QWidget = None) -> None:
         """初始化 ExportDialog.
@@ -88,6 +88,11 @@ class ExportDialog(QDialog):
 
         layout.addWidget(type_group)  # 添加分组
 
+        # 合并选项
+        self._merge_check: QCheckBox = QCheckBox("合并同一设备类型所有 slot 为单文件", self)  # 合并勾选框
+        self._merge_check.setToolTip("勾选后按 uptime 合并所有 slot，列名加 _s0/_s1 后缀")  # 提示
+        layout.addWidget(self._merge_check)  # 添加合并选项
+
         # 确认/取消按钮
         button_box: QDialogButtonBox = QDialogButtonBox(  # 标准按钮盒
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,  # 确定+取消
@@ -115,5 +120,5 @@ class ExportDialog(QDialog):
             QMessageBox.warning(self, "警告", "请至少选择一种设备类型")  # 警告对话框
             return  # 不关闭对话框
 
-        self.export_requested.emit(self._output_dir, selected)  # 发射导出信号
+        self.export_requested.emit(self._output_dir, selected, self._merge_check.isChecked())  # 发射导出信号（含合并标志）
         self.accept()  # 关闭对话框

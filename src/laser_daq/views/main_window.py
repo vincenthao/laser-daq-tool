@@ -248,6 +248,8 @@ class MainWindow(QMainWindow):
         # 更新 chart/stats 的数据模型引用（使用公开方法）
         self._chart_view.set_data_model(model)  # 同步图表视图
         self._stats_panel.set_data_model(model)  # 同步统计面板
+        self._annotation_panel.set_data_model(model)  # 同步标注面板
+        self._export_ctrl.set_data_model(model)  # 同步导出控制器
 
         self._preview_table.set_data(model.raw_df)  # 显示数据
 

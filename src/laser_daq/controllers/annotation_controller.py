@@ -60,8 +60,10 @@ class AnnotationController(QObject):
             self.batch_applied.emit(0)
             return
 
-        # 查找数据中所有 (func_group, tp) 相同的行
-        mask = (self._model.raw_df["func"] == func_group) & (self._model.raw_df["tp"] == tp)
+        # 查找同一设备中所有 (func_group, tp) 相同的行（限定 node_id，不同设备物理含义不同）
+        mask = ((self._model.raw_df["node_id"] == node_id) &
+                (self._model.raw_df["func"] == func_group) &
+                (self._model.raw_df["tp"] == tp))
         matching = self._model.raw_df.loc[mask, ["node_id", "slot", "func", "tp"]]
         unique_combos = matching.drop_duplicates()
 

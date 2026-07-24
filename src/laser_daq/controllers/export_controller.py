@@ -41,12 +41,21 @@ class ExportController(QObject):
         self._thread: Optional[QThread] = None  # 工作线程
         self._worker: Optional[ExportWorker] = None  # 工作对象
 
-    def export(self, output_dir: object, selected_types: object) -> None:
+    def set_data_model(self, model: DataModel) -> None:
+        """更新数据模型引用（导入完成后由 MainWindow 调用）.
+
+        Args:
+            model: 新的 DataModel 实例
+        """  # 方法文档
+        self._model = model  # 更新引用
+
+    def export(self, output_dir: object, selected_types: object, merge_all: bool = False) -> None:
         """导出每种设备类型的宽表 CSV (V2).
 
         Args:
             output_dir: 输出目录（str 或 Path）
             selected_types: 要导出的设备类型名称列表
+            merge_all: True 时合并同一设备类型所有 slot 为单文件（按 uptime 对齐）
         """  # 方法文档
         if self._model.raw_df.empty:  # 无数据
             self.export_error.emit("没有数据可以导出，请先导入 CSV")
@@ -92,6 +101,10 @@ class ExportController(QObject):
             if not file_data:
                 self.export_error.emit("没有匹配的数据可导出")
                 return
+
+            # 合并模式：同一设备类型所有 slot 按 uptime 合并为单文件
+            if merge_all and file_data:  # 需要合并且有数据
+                file_data = self._merge_slot_files(file_data)  # 按设备类型合并
 
             self.export_started.emit()
 
@@ -159,11 +172,11 @@ class ExportController(QObject):
         slot_df = slot_df.copy()  # 防止 SettingWithCopyWarning
         slot_df["key"] = list(zip(slot_df["func"], slot_df["tp"]))  # (func, tp) 对作为组合键
 
-        # 步骤1：按 uptime + (func, tp) pivot
+        # 步骤1：按 sample_seq + (func, tp) pivot（V3: sample_seq 替代 uptime 做对齐主键）
         pivot_df = slot_df.pivot_table(
-            index="uptime",
+            index="sample_seq",
             columns="key",
-            values="val_float",  # V2: val_float 替代 val
+            values="val_float",
             aggfunc="first",
         ).reset_index()
 
@@ -217,11 +230,77 @@ class ExportController(QObject):
             if tgt_col in pivot_df.columns:
                 pivot_df[tgt_col] = pivot_df[tgt_col].ffill()
 
-        # 步骤6：添加 node_id 列，按 uptime 排序
-        pivot_df["node_id"] = node_id
-        pivot_df = pivot_df.sort_values("uptime").reset_index(drop=True)
+        # 步骤6：添加 node_id 列和 uptime_avg（V3: 附该 sample_seq 的平均时间）
+        pivot_df["node_id"] = node_id  # 设备 ID
+        if "uptime" in slot_df.columns:  # 原始数据含 uptime（V3 格式在最后一列）
+            ts = slot_df.groupby("sample_seq")["uptime"].mean().reset_index()  # 按 sample_seq 取平均时间
+            ts.rename(columns={"uptime": "uptime_avg"}, inplace=True)  # 重命名
+            pivot_df = pivot_df.merge(ts, on="sample_seq", how="left")  # 关联时间
+        pivot_df = pivot_df.sort_values("sample_seq").reset_index(drop=True)  # 按 sample_seq 排序
 
-        # 调整列顺序：uptime, node_id 放前面
-        cols = ["uptime", "node_id"] + [c for c in pivot_df.columns
-                                         if c not in ("uptime", "node_id")]
+        # 调整列顺序：sample_seq, node_id 放前面
+        cols = ["sample_seq", "node_id"] + [c for c in pivot_df.columns
+                                         if c not in ("sample_seq", "node_id")]
         return pivot_df[cols]
+
+    @staticmethod
+    def _merge_slot_files(file_data: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+        """将同一设备类型的所有 slot 按 uptime 合并为单文件.
+
+        列名添加 _n{node_id}_s{slot} 后缀以区分来源.
+
+        Args:
+            file_data: 原始文件名 -> DataFrame 映射（如 "Laser_node2_slot0.csv" -> df）
+
+        Returns:
+            合并后的文件名 -> DataFrame 映射（如 "Laser.csv" -> merged_df）
+        """  # 方法文档
+        import re  # 正则解析文件名
+
+        # 按设备类型分组收集
+        type_groups: dict[str, list[tuple[int, int, pd.DataFrame]]] = {}  # type_name -> [(node_id, slot, df)]
+        pattern = re.compile(r"^(.+)_node(\d+)_slot(\d+)\.csv$")  # 解析 "TypeName_nodeX_slotY.csv"
+
+        for filename, df in file_data.items():  # 遍历所有文件
+            m = pattern.match(filename)  # 匹配文件名格式
+            if not m:  # 不匹配时跳过（保留原样）
+                type_groups.setdefault("_other", []).append((0, 0, df))  # 归入 other
+                continue  # 下一个
+            type_name = m.group(1)  # 设备类型名
+            node_id = int(m.group(2))  # 节点 ID
+            slot = int(m.group(3))  # 槽位
+            type_groups.setdefault(type_name, []).append((node_id, slot, df))  # 收集
+
+        result: dict[str, pd.DataFrame] = {}  # 合并结果
+
+        for type_name, items in type_groups.items():  # 遍历每种设备类型
+            if type_name == "_other":  # 不匹配的文件保留原样
+                for _, _, df in items:  # 重新放回（理论上不会到这里）
+                    pass  # 跳过
+                continue  # 下一个类型
+
+            # 按 sample_seq 逐步合并（V3: 同批次精确对齐）
+            merged: pd.DataFrame | None = None  # 累积合并结果
+            for node_id, slot, df in items:  # 遍历该类型所有 slot
+                suffix = f"_n{node_id}_s{slot}"  # 列后缀
+                # 重命名非公用列
+                rename: dict[str, str] = {}  # 原列名 -> 新列名
+                for col in df.columns:  # 遍历所有列
+                    if col in ("sample_seq", "node_id", "uptime_avg"):  # 公用列，跳过
+                        continue  # 不重命名
+                    rename[col] = f"{col}{suffix}"  # 添加后缀
+                df_renamed = df.rename(columns=rename)  # 重命名
+                # 删除 node_id 列（合并后无意义），保留 uptime_avg
+                if "node_id" in df_renamed.columns:  # 有 node_id 列
+                    df_renamed = df_renamed.drop(columns=["node_id"])  # 删除
+
+                if merged is None:  # 第一个 DataFrame
+                    merged = df_renamed  # 直接赋值
+                else:  # 后续 DataFrame
+                    merged = pd.merge(merged, df_renamed, on="sample_seq", how="outer")  # V3: 按 sample_seq 外连接
+
+            if merged is not None and not merged.empty:  # 合并成功
+                merged = merged.sort_values("sample_seq").reset_index(drop=True)  # V3: 按 sample_seq 排序
+                result[f"{type_name}.csv"] = merged  # 存入结果
+
+        return result if result else file_data  # 有合并结果则返回，否则返回原数据
